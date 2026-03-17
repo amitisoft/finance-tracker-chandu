@@ -1,0 +1,13 @@
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/backend.log
+backend/backend.err
+frontend/node_modules/
+frontend/dist/
+frontend/frontend.log
+frontend/frontend.err
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+*.zip
+*.docx
