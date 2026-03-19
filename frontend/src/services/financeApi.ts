@@ -35,6 +35,22 @@ export const financeApi = {
     paymentMethod?: string;
     tags?: string[];
   }) => (await api.post<Transaction>("/api/transactions", payload)).data,
+  updateTransaction: async (
+    transactionId: string,
+    payload: {
+      type: string;
+      amount: number;
+      date: string;
+      accountId: string;
+      destinationAccountId?: string;
+      categoryId?: string;
+      merchant?: string;
+      note?: string;
+      paymentMethod?: string;
+      tags?: string[];
+    }
+  ) => (await api.put<Transaction>(`/api/transactions/${transactionId}`, payload)).data,
+  deleteTransaction: async (transactionId: string) => (await api.delete(`/api/transactions/${transactionId}`)).data,
   budgets: async (month: number, year: number) =>
     (await api.get<Budget[]>("/api/budgets", { params: { month, year } })).data,
   createBudget: async (payload: {
@@ -44,6 +60,17 @@ export const financeApi = {
     amount: number;
     alertThresholdPercent: number;
   }) => (await api.post<Budget>("/api/budgets", payload)).data,
+  updateBudget: async (
+    budgetId: string,
+    payload: {
+      categoryId: string;
+      month: number;
+      year: number;
+      amount: number;
+      alertThresholdPercent: number;
+    }
+  ) => (await api.put<Budget>(`/api/budgets/${budgetId}`, payload)).data,
+  deleteBudget: async (budgetId: string) => (await api.delete(`/api/budgets/${budgetId}`)).data,
   goals: async () => (await api.get<Goal[]>("/api/goals")).data,
   createGoal: async (payload: {
     name: string;
@@ -53,6 +80,8 @@ export const financeApi = {
     icon?: string;
     color?: string;
   }) => (await api.post<Goal>("/api/goals", payload)).data,
+  contributeGoal: async (goalId: string, payload: { amount: number; sourceAccountId?: string }) =>
+    (await api.post<Goal>(`/api/goals/${goalId}/contribute`, payload)).data,
   recurring: async () => (await api.get<RecurringItem[]>("/api/recurring")).data,
   createRecurring: async (payload: {
     title: string;

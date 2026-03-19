@@ -7,6 +7,7 @@ type AuthState = {
   accessToken: string | null;
   refreshToken: string | null;
   setAuth: (response: AuthResponse) => void;
+  updateUser: (patch: Partial<AuthUser>) => void;
   logout: () => void;
 };
 
@@ -22,6 +23,10 @@ export const useAuthStore = create<AuthState>()(
           accessToken: response.accessToken,
           refreshToken: response.refreshToken
         }),
+      updateUser: (patch) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, ...patch } : state.user
+        })),
       logout: () =>
         set({
           user: null,
