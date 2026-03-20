@@ -1,6 +1,7 @@
 import { api } from "./api";
 import type {
   Account,
+  AssistantResponse,
   AuthResponse,
   Budget,
   Category,
@@ -15,6 +16,8 @@ import type {
 export const financeApi = {
   login: async (payload: { email: string; password: string }) =>
     (await api.post<AuthResponse>("/api/auth/login", payload)).data,
+  assistantMessage: async (payload: { message: string }) =>
+    (await api.post<AssistantResponse>("/api/assistant/message", payload)).data,
   register: async (payload: { email: string; password: string; displayName: string }) =>
     (await api.post<AuthResponse>("/api/auth/register", payload)).data,
   dashboard: async () => (await api.get<DashboardResponse>("/api/dashboard")).data,

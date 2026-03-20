@@ -27,12 +27,19 @@ export function ReportsPage() {
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [monthFilter, setMonthFilter] = useState("ALL");
   const [yearFilter, setYearFilter] = useState("ALL");
-
-  if (dashboardLoading || transactionsLoading) return <LoadingState />;
-  if (dashboardError || transactionsError || !dashboard || !transactions) return <ErrorState message="Reports are unavailable." />;
-
-  const availableYears = Array.from(new Set(transactions.map((transaction) => new Date(transaction.date).getFullYear().toString()))).sort().reverse();
-  const filteredTransactions = transactions.filter((transaction) => {
+  const safeDashboard = dashboard ?? {
+    currentMonthIncome: 0,
+    currentMonthExpense: 0,
+    netBalance: 0,
+    spendingByCategory: [],
+    incomeVsExpenseTrend: [],
+    recentTransactions: [],
+    upcomingRecurringPayments: [],
+    goals: []
+  };
+  const safeTransactions = transactions ?? [];
+  const availableYears = Array.from(new Set(safeTransactions.map((transaction) => new Date(transaction.date).getFullYear().toString()))).sort().reverse();
+  const filteredTransactions = safeTransactions.filter((transaction) => {
     const date = new Date(transaction.date);
     const matchesSearch = [transaction.merchant, transaction.note, transaction.categoryName, transaction.accountName]
       .filter(Boolean)
@@ -67,6 +74,9 @@ export function ReportsPage() {
       categorySpend
     };
   }, [filteredTransactions]);
+
+  if (dashboardLoading || transactionsLoading) return <LoadingState />;
+  if (dashboardError || transactionsError || !dashboard || !transactions) return <ErrorState message="Reports are unavailable." />;
 
   return (
     <div className="stack-layout">
@@ -148,6 +158,7 @@ export function ReportsPage() {
         <Card className="chart-card" subtitle="Overall monthly trend" title="Income vs Expense">
           <ResponsiveContainer height={300} width="100%">
             <LineChart data={dashboard.incomeVsExpenseTrend}>
+            
               <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
               <XAxis axisLine={false} dataKey="month" tickLine={false} />
               <YAxis axisLine={false} tickLine={false} />

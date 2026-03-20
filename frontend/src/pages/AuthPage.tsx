@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { financeApi } from "../services/financeApi";
 import { useAuthStore } from "../store/authStore";
@@ -22,6 +22,8 @@ type RegisterValues = z.infer<typeof registerSchema>;
 export function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const navigate = useNavigate();
+  const hydrated = useAuthStore((state) => state.hydrated);
+  const accessToken = useAuthStore((state) => state.accessToken);
   const setAuth = useAuthStore((state) => state.setAuth);
   const loginForm = useForm<LoginValues>({ resolver: zodResolver(loginSchema), defaultValues: { email: "", password: "" } });
   const registerForm = useForm<RegisterValues>({
@@ -37,6 +39,14 @@ export function AuthPage() {
       navigate("/");
     }
   });
+
+  if (!hydrated) {
+    return null;
+  }
+
+  if (accessToken) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="auth-page">

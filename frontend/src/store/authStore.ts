@@ -6,6 +6,7 @@ type AuthState = {
   user: AuthUser | null;
   accessToken: string | null;
   refreshToken: string | null;
+  hydrated: boolean;
   setAuth: (response: AuthResponse) => void;
   updateUser: (patch: Partial<AuthUser>) => void;
   logout: () => void;
@@ -17,6 +18,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       refreshToken: null,
+      hydrated: false,
       setAuth: (response) =>
         set({
           user: response.user,
@@ -39,3 +41,11 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+useAuthStore.persist.onFinishHydration(() => {
+  useAuthStore.setState({ hydrated: true });
+});
+
+if (useAuthStore.persist.hasHydrated()) {
+  useAuthStore.setState({ hydrated: true });
+}

@@ -112,3 +112,10 @@ export type DashboardResponse = {
   upcomingRecurringPayments: RecurringItem[];
   goals: Goal[];
 };
+
+export type AssistantResponse = {
+  reply: string;
+  intent: string;
+  actionTaken: boolean;
+  spokenReply: string;
+};

@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from "react";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { VoiceAssistant } from "../assistant/VoiceAssistant";
 import { useAuthStore } from "../../store/authStore";
 import { useToastStore } from "../../store/toastStore";
 
@@ -109,6 +110,7 @@ export function AppShell({ children }: PropsWithChildren) {
           </div>
         </header>
         {children ?? <Outlet />}
+        <VoiceAssistant />
       </main>
     </div>
   );

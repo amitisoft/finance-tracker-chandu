@@ -1,30 +1,49 @@
 import { useQuery } from "@tanstack/react-query";
 import { financeApi } from "../services/financeApi";
+import { useAuthStore } from "../store/authStore";
 
 export function useDashboardQuery() {
-  return useQuery({ queryKey: ["dashboard"], queryFn: financeApi.dashboard });
+  const token = useAuthStore((state) => state.accessToken);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  return useQuery({ queryKey: ["dashboard"], queryFn: financeApi.dashboard, enabled: hydrated && Boolean(token) });
 }
 
 export function useAccountsQuery() {
-  return useQuery({ queryKey: ["accounts"], queryFn: financeApi.accounts });
+  const token = useAuthStore((state) => state.accessToken);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  return useQuery({ queryKey: ["accounts"], queryFn: financeApi.accounts, enabled: hydrated && Boolean(token) });
 }
 
 export function useCategoriesQuery() {
-  return useQuery({ queryKey: ["categories"], queryFn: financeApi.categories });
+  const token = useAuthStore((state) => state.accessToken);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  return useQuery({ queryKey: ["categories"], queryFn: financeApi.categories, enabled: hydrated && Boolean(token) });
 }
 
 export function useTransactionsQuery() {
-  return useQuery({ queryKey: ["transactions"], queryFn: financeApi.transactions });
+  const token = useAuthStore((state) => state.accessToken);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  return useQuery({ queryKey: ["transactions"], queryFn: financeApi.transactions, enabled: hydrated && Boolean(token) });
 }
 
 export function useBudgetsQuery(month: number, year: number) {
-  return useQuery({ queryKey: ["budgets", month, year], queryFn: () => financeApi.budgets(month, year) });
+  const token = useAuthStore((state) => state.accessToken);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  return useQuery({
+    queryKey: ["budgets", month, year],
+    queryFn: () => financeApi.budgets(month, year),
+    enabled: hydrated && Boolean(token)
+  });
 }
 
 export function useGoalsQuery() {
-  return useQuery({ queryKey: ["goals"], queryFn: financeApi.goals });
+  const token = useAuthStore((state) => state.accessToken);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  return useQuery({ queryKey: ["goals"], queryFn: financeApi.goals, enabled: hydrated && Boolean(token) });
 }
 
 export function useRecurringQuery() {
-  return useQuery({ queryKey: ["recurring"], queryFn: financeApi.recurring });
+  const token = useAuthStore((state) => state.accessToken);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  return useQuery({ queryKey: ["recurring"], queryFn: financeApi.recurring, enabled: hydrated && Boolean(token) });
 }

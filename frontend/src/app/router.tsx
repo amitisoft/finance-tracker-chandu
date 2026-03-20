@@ -11,7 +11,11 @@ import { TransactionsPage } from "../pages/TransactionsPage";
 import { useAuthStore } from "../store/authStore";
 
 function ProtectedLayout() {
+  const hydrated = useAuthStore((state) => state.hydrated);
   const token = useAuthStore((state) => state.accessToken);
+  if (!hydrated) {
+    return null;
+  }
   if (!token) {
     return <Navigate to="/auth" replace />;
   }
