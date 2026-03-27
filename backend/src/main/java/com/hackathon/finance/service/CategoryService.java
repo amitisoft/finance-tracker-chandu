@@ -9,6 +9,7 @@ import com.hackathon.finance.exception.NotFoundException;
 import com.hackathon.finance.mapper.EntityMapper;
 import com.hackathon.finance.repository.CategoryRepository;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -62,5 +63,10 @@ public class CategoryService {
     public CategoryEntity findOwned(UUID id) {
         return categoryRepository.findByIdAndUser(id, userContextService.getCurrentUser())
                 .orElseThrow(() -> new NotFoundException("Category not found."));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<CategoryEntity> findByUserAndName(UserEntity user, String name) {
+        return categoryRepository.findByUserAndNameIgnoreCase(user, name.trim());
     }
 }

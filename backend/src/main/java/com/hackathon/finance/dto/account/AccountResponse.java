@@ -1,6 +1,7 @@
 package com.hackathon.finance.dto.account;
 
 import com.hackathon.finance.entity.enums.AccountType;
+import com.hackathon.finance.entity.enums.AccountMemberRole;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -12,6 +13,9 @@ public record AccountResponse(
         BigDecimal openingBalance,
         BigDecimal currentBalance,
         String institutionName,
-        OffsetDateTime updatedAt
+        OffsetDateTime updatedAt,
+        AccountMemberRole accessRole,
+        String ownerDisplayName,
+        int memberCount
 ) {
 }

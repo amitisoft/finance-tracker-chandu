@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface RecurringTransactionRepository extends JpaRepository<RecurringTransactionEntity, UUID> {
     List<RecurringTransactionEntity> findAllByUserOrderByNextRunDateAsc(UserEntity user);
+    List<RecurringTransactionEntity> findAllByUserAndPausedFalseOrderByNextRunDateAsc(UserEntity user);
     Optional<RecurringTransactionEntity> findByIdAndUser(UUID id, UserEntity user);
     List<RecurringTransactionEntity> findAllByPausedFalseAndAutoCreateTransactionTrueAndNextRunDateLessThanEqual(LocalDate date);
 }

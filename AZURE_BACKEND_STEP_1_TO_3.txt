@@ -1,0 +1,46 @@
+Azure backend service name from your screenshot:
+finance-tracker18
+
+Step 1 complete:
+Use Azure Database for PostgreSQL Flexible Server:
+- Server: finance-tracker18-server
+- Database: finance-tracker18-database
+
+Step 2 complete:
+Use Azure App Service:
+- App name: finance-tracker18
+
+Step 3: Add these environment variables in Azure Portal
+Path:
+App Service -> finance-tracker18 -> Settings -> Environment variables -> App settings
+
+Add:
+DB_URL=jdbc:postgresql://finance-tracker18-server.postgres.database.azure.com:5432/finance-tracker18-database?sslmode=require
+DB_USERNAME=xildqooser
+DB_PASSWORD=NYch0$ncvjxCODns
+JWT_SECRET=7jW7LJQw75m3QXq1mT1vVb5yI0cA4Gd9Vn2Qx6Rk9Yp4Tz8Wb2Mf6Hc3Lp1Nr5Sa
+FRONTEND_URL=http://localhost:5173
+SERVER_PORT=8080
+
+Notes:
+- JWT_SECRET is taken from backend/src/main/resources/application.properties
+- FRONEND_URL can stay as http://localhost:5173 for now and must be changed later to your Azure frontend URL
+- After adding values, click Apply
+
+GitHub secret you still need before deployment works:
+- AZURE_WEBAPP_PUBLISH_PROFILE
+
+How to get it:
+1. Open App Service finance-tracker18
+2. Click Get publish profile
+3. Download the file
+4. In GitHub repo -> Settings -> Secrets and variables -> Actions
+5. Create new repository secret:
+   Name: AZURE_WEBAPP_PUBLISH_PROFILE
+   Value: paste full XML from the publish profile file
+
+Workflow added in repo:
+.github/workflows/backend-deploy.yml
+
+What it fixes:
+- Maven now builds from backend/pom.xml instead of repo root

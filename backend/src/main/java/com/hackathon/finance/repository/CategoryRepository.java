@@ -12,5 +12,6 @@ public interface CategoryRepository extends JpaRepository<CategoryEntity, UUID> 
     List<CategoryEntity> findAllByUserAndArchivedFalseOrderByNameAsc(UserEntity user);
     List<CategoryEntity> findAllByUserAndTypeAndArchivedFalseOrderByNameAsc(UserEntity user, CategoryType type);
     Optional<CategoryEntity> findByIdAndUser(UUID id, UserEntity user);
+    Optional<CategoryEntity> findByUserAndNameIgnoreCase(UserEntity user, String name);
     boolean existsByUserAndNameIgnoreCaseAndType(UserEntity user, String name, CategoryType type);
 }

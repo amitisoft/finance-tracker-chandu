@@ -4,6 +4,7 @@ import com.hackathon.finance.entity.enums.TransactionType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -22,6 +23,9 @@ public record TransactionResponse(
         String note,
         String paymentMethod,
         Set<String> tags,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        UUID createdByUserId,
+        String createdByDisplayName,
+        List<String> alerts
 ) {
 }

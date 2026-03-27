@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,39 +31,53 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final AccountService accountService;
+    private final AccountAccessService accountAccessService;
     private final CategoryService categoryService;
     private final UserContextService userContextService;
     private final RecurringTransactionRepository recurringTransactionRepository;
+    private final RuleService ruleService;
     private final EntityMapper mapper;
 
     @Transactional(readOnly = true)
     public List<TransactionResponse> search(LocalDate fromDate, LocalDate toDate, UUID accountId, UUID categoryId, TransactionType type, String searchTerm) {
         UserEntity user = userContextService.getCurrentUser();
-        return transactionRepository.search(user, fromDate, toDate, accountId, categoryId, type, blankToNull(searchTerm))
-                .stream().map(mapper::toTransactionResponse).toList();
+        String normalizedSearchTerm = blankToNull(searchTerm);
+        Set<UUID> accessibleAccountIds = accountAccessService.getAccessibleAccountIds();
+        Specification<TransactionEntity> specification = belongsToAccounts(accessibleAccountIds)
+                .and(onOrAfter(fromDate))
+                .and(onOrBefore(toDate))
+                .and(hasAccount(accountId))
+                .and(hasCategory(categoryId))
+                .and(hasType(type))
+                .and(matchesSearch(normalizedSearchTerm));
+        List<TransactionEntity> transactions = transactionRepository.findAll(
+                specification,
+                Sort.by(Sort.Order.desc("transactionDate"), Sort.Order.desc("createdAt"))
+        );
+        return transactions.stream().map(transaction -> mapper.toTransactionResponse(transaction, List.of())).toList();
     }
 
     @Transactional(readOnly = true)
     public TransactionResponse getById(UUID id) {
-        return mapper.toTransactionResponse(findOwned(id));
+        return mapper.toTransactionResponse(findOwned(id), List.of());
     }
 
     @Transactional
     public TransactionResponse create(TransactionRequest request) {
         TransactionEntity transaction = new TransactionEntity();
         transaction.setUser(userContextService.getCurrentUser());
-        populateAndValidate(transaction, request);
+        RuleService.RuleApplicationResult ruleResult = populateAndValidate(transaction, request);
         applyBalanceEffect(transaction, true);
-        return mapper.toTransactionResponse(transactionRepository.save(transaction));
+        return mapper.toTransactionResponse(transactionRepository.save(transaction), ruleResult.alerts());
     }
 
     @Transactional
     public TransactionResponse update(UUID id, TransactionRequest request) {
         TransactionEntity transaction = findOwned(id);
         applyBalanceEffect(transaction, false);
-        populateAndValidate(transaction, request);
+        RuleService.RuleApplicationResult ruleResult = populateAndValidate(transaction, request);
         applyBalanceEffect(transaction, true);
-        return mapper.toTransactionResponse(transaction);
+        return mapper.toTransactionResponse(transaction, ruleResult.alerts());
     }
 
     @Transactional
@@ -73,13 +89,17 @@ public class TransactionService {
 
     @Transactional(readOnly = true)
     public List<TransactionEntity> findTransactionsForRange(LocalDate fromDate, LocalDate toDate) {
-        return transactionRepository.findAllByUserAndDateRange(userContextService.getCurrentUser(), fromDate, toDate);
+        Set<UUID> accessibleIds = accountAccessService.getAccessibleAccountIds();
+        return accessibleIds.isEmpty() ? List.of() : transactionRepository.findAllByAccountIdInAndTransactionDateBetween(accessibleIds, fromDate, toDate);
     }
 
     @Transactional(readOnly = true)
     public List<TransactionResponse> recent() {
-        return transactionRepository.findTop5ByUserOrderByTransactionDateDescCreatedAtDesc(userContextService.getCurrentUser())
-                .stream().map(mapper::toTransactionResponse).toList();
+        Set<UUID> accessibleIds = accountAccessService.getAccessibleAccountIds();
+        return accessibleIds.isEmpty() ? List.of() : transactionRepository.findTop5ByAccountIdInOrderByTransactionDateDescCreatedAtDesc(accessibleIds)
+                .stream()
+                .map(transaction -> mapper.toTransactionResponse(transaction, List.of()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -104,9 +124,13 @@ public class TransactionService {
         transactionRepository.save(transaction);
     }
 
-    private void populateAndValidate(TransactionEntity transaction, TransactionRequest request) {
-        AccountEntity account = accountService.findOwned(request.accountId());
-        AccountEntity destinationAccount = request.destinationAccountId() != null ? accountService.findOwned(request.destinationAccountId()) : null;
+    private RuleService.RuleApplicationResult populateAndValidate(TransactionEntity transaction, TransactionRequest request) {
+        AccountEntity account = accountService.findAccessible(request.accountId());
+        accountAccessService.ensureEditor(account);
+        AccountEntity destinationAccount = request.destinationAccountId() != null ? accountService.findAccessible(request.destinationAccountId()) : null;
+        if (destinationAccount != null) {
+            accountAccessService.ensureEditor(destinationAccount);
+        }
         CategoryEntity category = request.categoryId() != null ? categoryService.findOwned(request.categoryId()) : null;
         RecurringTransactionEntity recurring = request.recurringTransactionId() != null
                 ? recurringTransactionRepository.findByIdAndUser(request.recurringTransactionId(), userContextService.getCurrentUser()).orElse(null)
@@ -133,6 +157,11 @@ public class TransactionService {
         transaction.setNote(request.note());
         transaction.setPaymentMethod(request.paymentMethod());
         transaction.setTags(request.tags() == null ? new LinkedHashSet<>() : new LinkedHashSet<>(request.tags()));
+        RuleService.RuleApplicationResult ruleResult = ruleService.applyRules(userContextService.getCurrentUser(), transaction);
+        if (request.type() != TransactionType.TRANSFER && transaction.getCategory() == null) {
+            throw new BadRequestException("Category is required for income and expense transactions.");
+        }
+        return ruleResult;
     }
 
     private void applyBalanceEffect(TransactionEntity transaction, boolean apply) {
@@ -160,5 +189,47 @@ public class TransactionService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private Specification<TransactionEntity> belongsToAccounts(Set<UUID> accountIds) {
+        return (root, query, criteriaBuilder) -> root.get("account").get("id").in(accountIds);
+    }
+
+    private Specification<TransactionEntity> onOrAfter(LocalDate fromDate) {
+        return (root, query, criteriaBuilder) ->
+                fromDate == null ? null : criteriaBuilder.greaterThanOrEqualTo(root.get("transactionDate"), fromDate);
+    }
+
+    private Specification<TransactionEntity> onOrBefore(LocalDate toDate) {
+        return (root, query, criteriaBuilder) ->
+                toDate == null ? null : criteriaBuilder.lessThanOrEqualTo(root.get("transactionDate"), toDate);
+    }
+
+    private Specification<TransactionEntity> hasAccount(UUID accountId) {
+        return (root, query, criteriaBuilder) ->
+                accountId == null ? null : criteriaBuilder.equal(root.get("account").get("id"), accountId);
+    }
+
+    private Specification<TransactionEntity> hasCategory(UUID categoryId) {
+        return (root, query, criteriaBuilder) ->
+                categoryId == null ? null : criteriaBuilder.equal(root.get("category").get("id"), categoryId);
+    }
+
+    private Specification<TransactionEntity> hasType(TransactionType type) {
+        return (root, query, criteriaBuilder) ->
+                type == null ? null : criteriaBuilder.equal(root.get("type"), type);
+    }
+
+    private Specification<TransactionEntity> matchesSearch(String searchTerm) {
+        return (root, query, criteriaBuilder) -> {
+            if (searchTerm == null) {
+                return null;
+            }
+            String pattern = "%" + searchTerm.toLowerCase() + "%";
+            return criteriaBuilder.or(
+                    criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.coalesce(root.get("merchant"), "")), pattern),
+                    criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.coalesce(root.get("note"), "")), pattern)
+            );
+        };
     }
 }

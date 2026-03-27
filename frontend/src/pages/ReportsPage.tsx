@@ -1,42 +1,40 @@
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMemo, useState } from "react";
 import { Card } from "../components/ui/Card";
 import { ErrorState } from "../components/ui/ErrorState";
 import { LoadingState } from "../components/ui/LoadingState";
-import { useAccountsQuery, useCategoriesQuery, useDashboardQuery, useTransactionsQuery } from "../hooks/useFinanceQueries";
+import {
+  useAccountsQuery,
+  useCashFlowForecastQuery,
+  useCategoriesQuery,
+  useNetWorthQuery,
+  useTransactionsQuery,
+  useTrendsReportQuery
+} from "../hooks/useFinanceQueries";
 import { formatCurrency, formatDate } from "../utils/format";
 
+function isoDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
 export function ReportsPage() {
-  const { data: dashboard, isLoading: dashboardLoading, isError: dashboardError } = useDashboardQuery();
+  const today = new Date();
+  const defaultFrom = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  const [forecastMonths, setForecastMonths] = useState(6);
+  const [fromDate, setFromDate] = useState(isoDate(defaultFrom));
+  const [toDate, setToDate] = useState(isoDate(today));
   const { data: transactions, isLoading: transactionsLoading, isError: transactionsError } = useTransactionsQuery();
   const { data: accounts } = useAccountsQuery();
   const { data: categories } = useCategoriesQuery();
+  const { data: trends, isLoading: trendsLoading, isError: trendsError } = useTrendsReportQuery(fromDate, toDate);
+  const { data: netWorth, isLoading: netWorthLoading, isError: netWorthError } = useNetWorthQuery(fromDate, toDate);
+  const { data: cashFlowForecast, isLoading: forecastLoading, isError: forecastError } = useCashFlowForecastQuery(forecastMonths);
   const [search, setSearch] = useState("");
   const [accountFilter, setAccountFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [monthFilter, setMonthFilter] = useState("ALL");
   const [yearFilter, setYearFilter] = useState("ALL");
-  const safeDashboard = dashboard ?? {
-    currentMonthIncome: 0,
-    currentMonthExpense: 0,
-    netBalance: 0,
-    spendingByCategory: [],
-    incomeVsExpenseTrend: [],
-    recentTransactions: [],
-    upcomingRecurringPayments: [],
-    goals: []
-  };
   const safeTransactions = transactions ?? [];
   const availableYears = Array.from(new Set(safeTransactions.map((transaction) => new Date(transaction.date).getFullYear().toString()))).sort().reverse();
   const filteredTransactions = safeTransactions.filter((transaction) => {
@@ -55,7 +53,6 @@ export function ReportsPage() {
   const reportSummary = useMemo(() => {
     const income = filteredTransactions.filter((item) => item.type === "INCOME").reduce((sum, item) => sum + item.amount, 0);
     const expense = filteredTransactions.filter((item) => item.type === "EXPENSE").reduce((sum, item) => sum + item.amount, 0);
-    const transfer = filteredTransactions.filter((item) => item.type === "TRANSFER").reduce((sum, item) => sum + item.amount, 0);
     const byCategory = filteredTransactions.reduce<Record<string, number>>((acc, item) => {
       const key = item.categoryName || item.type;
       acc[key] = (acc[key] ?? 0) + item.amount;
@@ -63,26 +60,30 @@ export function ReportsPage() {
     }, {});
     const categorySpend = Object.entries(byCategory)
       .map(([name, total]) => ({ name, total }))
-      .sort((a, b) => b.total - a.total)
+      .sort((left, right) => right.total - left.total)
       .slice(0, 6);
-
-    return {
-      income,
-      expense,
-      transfer,
-      net: income - expense,
-      categorySpend
-    };
+    return { income, expense, net: income - expense, categorySpend };
   }, [filteredTransactions]);
 
-  if (dashboardLoading || transactionsLoading) return <LoadingState />;
-  if (dashboardError || transactionsError || !dashboard || !transactions) return <ErrorState message="Reports are unavailable." />;
+  if (transactionsLoading || trendsLoading || netWorthLoading || forecastLoading) return <LoadingState />;
+  if (transactionsError || trendsError || netWorthError || forecastError || !trends || !netWorth || !cashFlowForecast) {
+    return <ErrorState message="Reports are unavailable." />;
+  }
+
+  const forecastToneClass =
+    cashFlowForecast.healthSignal === "CRITICAL"
+      ? "summary-card-danger"
+      : cashFlowForecast.healthSignal === "WATCH"
+        ? "summary-card-warning"
+        : "summary-card-success";
 
   return (
     <div className="stack-layout">
-      <Card subtitle="Slice by account, category, type, month, and year" title="Reports">
+      <Card subtitle="Slice by date, account, category, and type" title="Reports">
         <div className="filter-bar filter-bar-reports">
           <input onChange={(event) => setSearch(event.target.value)} placeholder="Search merchant, note, category..." value={search} />
+          <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+          <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
           <select onChange={(event) => setAccountFilter(event.target.value)} value={accountFilter}>
             <option value="ALL">All accounts</option>
             {(accounts ?? []).map((account) => (
@@ -142,8 +143,62 @@ export function ReportsPage() {
         </div>
       </Card>
 
+      <Card
+        subtitle="Projection blends recurring items with recent historical behavior"
+        title="Cash Flow Forecast"
+        action={
+          <select onChange={(event) => setForecastMonths(Number(event.target.value))} value={forecastMonths}>
+            <option value={3}>3 months</option>
+            <option value={6}>6 months</option>
+            <option value={12}>12 months</option>
+          </select>
+        }
+      >
+        <div className="summary-grid summary-grid-rich">
+          <div className="summary-card summary-card-primary">
+            <span>Current Balance</span>
+            <strong>{formatCurrency(cashFlowForecast.currentBalance)}</strong>
+          </div>
+          <div className="summary-card summary-card-success">
+            <span>Projected Close</span>
+            <strong>{formatCurrency(cashFlowForecast.projectedClosingBalance)}</strong>
+          </div>
+          <div className={`summary-card ${forecastToneClass}`}>
+            <span>Forecast Signal</span>
+            <strong>{cashFlowForecast.healthSignal}</strong>
+          </div>
+        </div>
+      </Card>
+
       <div className="chart-row">
-        <Card className="chart-card" subtitle="Filtered category totals" title="Spend Mix">
+        <Card className="chart-card" subtitle="Income vs expense across the selected range" title="Income vs Expense">
+          <ResponsiveContainer height={300} width="100%">
+            <LineChart data={trends.incomeExpenseTrend}>
+              <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
+              <XAxis axisLine={false} dataKey="month" tickLine={false} />
+              <YAxis axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Line dataKey="income" dot={false} stroke="#14b8a6" strokeWidth={3.2} type="monotone" />
+              <Line dataKey="expense" dot={false} stroke="#f97316" strokeWidth={3.2} type="monotone" />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+
+        <Card className="chart-card" subtitle="Savings retained from income each month" title="Savings Rate Trend">
+          <ResponsiveContainer height={300} width="100%">
+            <LineChart data={trends.savingsRateTrend}>
+              <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
+              <XAxis axisLine={false} dataKey="month" tickLine={false} />
+              <YAxis axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Line dataKey="savingsRate" dot={false} stroke="#0f766e" strokeWidth={3.2} type="monotone" />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+
+      <div className="chart-row">
+        <Card className="chart-card" subtitle="Top filtered categories in the visible data slice" title="Spend Mix">
           <ResponsiveContainer height={300} width="100%">
             <BarChart data={reportSummary.categorySpend}>
               <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
@@ -155,16 +210,14 @@ export function ReportsPage() {
           </ResponsiveContainer>
         </Card>
 
-        <Card className="chart-card" subtitle="Overall monthly trend" title="Income vs Expense">
+        <Card className="chart-card" subtitle="Trend points built by the backend insights service" title="Net Worth Tracking">
           <ResponsiveContainer height={300} width="100%">
-            <LineChart data={dashboard.incomeVsExpenseTrend}>
-            
+            <LineChart data={netWorth}>
               <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
               <XAxis axisLine={false} dataKey="month" tickLine={false} />
               <YAxis axisLine={false} tickLine={false} />
               <Tooltip />
-              <Line dataKey="income" dot={false} stroke="#14b8a6" strokeWidth={3.2} type="monotone" />
-              <Line dataKey="expense" dot={false} stroke="#f97316" strokeWidth={3.2} type="monotone" />
+              <Line dataKey="netWorth" dot={false} stroke="#8b5cf6" strokeWidth={3.2} type="monotone" />
             </LineChart>
           </ResponsiveContainer>
         </Card>

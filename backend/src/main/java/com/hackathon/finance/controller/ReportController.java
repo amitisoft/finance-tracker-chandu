@@ -3,6 +3,9 @@ package com.hackathon.finance.controller;
 import com.hackathon.finance.dto.report.AccountBalanceTrendItem;
 import com.hackathon.finance.dto.report.CategorySpendItem;
 import com.hackathon.finance.dto.report.IncomeExpenseTrendItem;
+import com.hackathon.finance.dto.report.NetWorthPointResponse;
+import com.hackathon.finance.dto.report.TrendsReportResponse;
+import com.hackathon.finance.service.InsightsService;
 import com.hackathon.finance.service.ReportService;
 import java.time.LocalDate;
 import java.util.List;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReportController {
 
     private final ReportService reportService;
+    private final InsightsService insightsService;
 
     @GetMapping("/category-spend")
     public List<CategorySpendItem> categorySpend(
@@ -40,6 +44,22 @@ public class ReportController {
     @GetMapping("/account-balance-trend")
     public List<AccountBalanceTrendItem> accountBalanceTrend() {
         return reportService.getAccountBalanceTrend();
+    }
+
+    @GetMapping("/trends")
+    public TrendsReportResponse trends(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+    ) {
+        return insightsService.getTrends(fromDate, toDate);
+    }
+
+    @GetMapping("/net-worth")
+    public List<NetWorthPointResponse> netWorth(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+    ) {
+        return insightsService.getNetWorthTrend(fromDate, toDate);
     }
 
     @GetMapping("/export.csv")

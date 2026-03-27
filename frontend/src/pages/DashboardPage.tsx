@@ -1,22 +1,11 @@
-import {
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../components/ui/Card";
 import { ErrorState } from "../components/ui/ErrorState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { SummaryCard } from "../components/ui/SummaryCard";
-import { useDashboardQuery } from "../hooks/useFinanceQueries";
+import { useDailyForecastQuery, useDashboardQuery, useHealthScoreQuery, useInsightsQuery, useMonthlyForecastQuery } from "../hooks/useFinanceQueries";
 import { formatCurrency, formatDate } from "../utils/format";
 
 const pieColors = ["#0f766e", "#f97316", "#38bdf8", "#8b5cf6", "#f43f5e", "#14b8a6", "#84cc16"];
@@ -28,6 +17,10 @@ const feedTabs = [
 
 export function DashboardPage() {
   const { data, isLoading, isError } = useDashboardQuery();
+  const { data: healthScore } = useHealthScoreQuery();
+  const { data: insights } = useInsightsQuery();
+  const { data: monthlyForecast } = useMonthlyForecastQuery();
+  const { data: dailyForecast } = useDailyForecastQuery();
   const navigate = useNavigate();
   const [activeFeed, setActiveFeed] = useState<(typeof feedTabs)[number]["id"]>("transactions");
   const dashboard = data ?? {
@@ -73,6 +66,8 @@ export function DashboardPage() {
   const latestGoal = data.goals[0];
   const latestTransaction = data.recentTransactions[0];
   const spendingTotal = data.spendingByCategory.reduce((sum, item) => sum + item.total, 0);
+  const topSpendingCategory = data.spendingByCategory[0];
+  const monthlySavingsRate = data.currentMonthIncome > 0 ? (cashRunway / data.currentMonthIncome) * 100 : 0;
 
   return (
     <div className="dashboard-layout">
@@ -81,13 +76,15 @@ export function DashboardPage() {
           <p className="eyebrow">Financial Pulse</p>
           <h2>{cashRunway >= 0 ? "You are operating in the green this month." : "Expenses are outrunning income this month."}</h2>
           <p>
-            Net position is <strong>{formatCurrency(data.netBalance)}</strong> with {data.recentTransactions.length} recent transaction
-            {data.recentTransactions.length === 1 ? "" : "s"} and {data.upcomingRecurringPayments.length} recurring item
-            {data.upcomingRecurringPayments.length === 1 ? "" : "s"} queued.
+            Net position is <strong>{formatCurrency(data.netBalance)}</strong>. Forecasted month-end balance is{" "}
+            <strong>{monthlyForecast ? formatCurrency(monthlyForecast.forecastedBalance) : "loading"}</strong>.
           </p>
           <div className="dashboard-hero-actions">
             <button className="primary-button" onClick={() => navigate("/transactions?compose=1")} type="button">
               Add transaction
+            </button>
+            <button className="secondary-button" onClick={() => navigate("/insights")} type="button">
+              Open insights
             </button>
           </div>
           <div className="dashboard-hero-stats">
@@ -96,12 +93,12 @@ export function DashboardPage() {
               <strong>{formatCurrency(cashRunway)}</strong>
             </div>
             <div>
-              <span>Goals in motion</span>
-              <strong>{data.goals.length}</strong>
+              <span>Health score</span>
+              <strong>{healthScore ? `${healthScore.score.toFixed(1)} / ${healthScore.band}` : "Loading..."}</strong>
             </div>
             <div>
-              <span>Recurring next up</span>
-              <strong>{data.upcomingRecurringPayments[0] ? formatDate(data.upcomingRecurringPayments[0].nextRunDate) : "None"}</strong>
+              <span>Safe to spend</span>
+              <strong>{monthlyForecast ? formatCurrency(monthlyForecast.safeToSpend) : "Loading..."}</strong>
             </div>
           </div>
         </div>
@@ -111,7 +108,7 @@ export function DashboardPage() {
           <span>
             {latestGoal
               ? `${formatCurrency(latestGoal.currentAmount)} saved of ${formatCurrency(latestGoal.targetAmount)}`
-              : "Create a goal to keep progress visible here."}
+              : insights?.[0]?.message ?? "Create a goal to keep progress visible here."}
           </span>
           <div className="progress-track">
             <div className="progress-bar" style={{ width: `${Math.min(latestGoal?.progressPercentage ?? 0, 100)}%` }} />
@@ -128,11 +125,74 @@ export function DashboardPage() {
         </div>
       </section>
 
+      <section className="dashboard-signal-grid">
+        <Card className="dashboard-signal-card" subtitle="Read this first before drilling into charts" title="Snapshot">
+          <div className="signal-list">
+            <div className="signal-item">
+              <span>Savings rate</span>
+              <strong>{data.currentMonthIncome > 0 ? `${monthlySavingsRate.toFixed(1)}%` : "No income yet"}</strong>
+            </div>
+            <div className="signal-item">
+              <span>Top spending zone</span>
+              <strong>{topSpendingCategory ? topSpendingCategory.categoryName : "No spend logged"}</strong>
+            </div>
+            <div className="signal-item">
+              <span>Recent activity</span>
+              <strong>{data.recentTransactions.length} transactions</strong>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="dashboard-signal-card" subtitle="Forecast and recommendation signals" title="Decision Support">
+          <div className="signal-action-list">
+            <div className="signal-action">
+              <strong>Projected Balance</strong>
+              <span>{monthlyForecast ? formatCurrency(monthlyForecast.forecastedBalance) : "Forecast unavailable"}</span>
+            </div>
+            <div className="signal-action">
+              <strong>Risk Warnings</strong>
+              <span>{monthlyForecast?.warnings.join(" ") || "No warning generated."}</span>
+            </div>
+            <div className="signal-action">
+              <strong>Latest Insight</strong>
+              <span>{insights?.[0]?.message ?? "No insight generated yet."}</span>
+            </div>
+          </div>
+        </Card>
+      </section>
+
       <section className="summary-grid summary-grid-rich">
         <SummaryCard label="Month Income" tone="success" value={data.currentMonthIncome} />
         <SummaryCard label="Month Expense" tone="danger" value={data.currentMonthExpense} />
         <SummaryCard label="Net Balance" tone="primary" value={data.netBalance} />
       </section>
+
+      <div className="chart-row">
+        <Card className="chart-card" subtitle="Today through month-end" title="Projected Balance">
+          <ResponsiveContainer height={300} width="100%">
+            <LineChart data={dailyForecast ?? []}>
+              <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
+              <XAxis axisLine={false} dataKey="date" tickFormatter={(value) => formatDate(value)} tickLine={false} />
+              <YAxis axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Line dataKey="projectedBalance" dot={false} stroke="#38bdf8" strokeWidth={3.2} type="monotone" />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+
+        <Card className="chart-card" subtitle="Six-month runway" title="Income vs Expense">
+          <ResponsiveContainer height={300} width="100%">
+            <LineChart data={data.incomeVsExpenseTrend}>
+              <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
+              <XAxis axisLine={false} dataKey="month" tickLine={false} />
+              <YAxis axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Line dataKey="income" dot={false} stroke="#14b8a6" strokeWidth={3.2} type="monotone" />
+              <Line dataKey="expense" dot={false} stroke="#f97316" strokeWidth={3.2} type="monotone" />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
 
       <div className="chart-row">
         <Card className="chart-card" subtitle="Hover slices to inspect the mix" title="Spending by Category">
@@ -161,46 +221,33 @@ export function DashboardPage() {
           </ResponsiveContainer>
         </Card>
 
-        <Card className="chart-card" subtitle="Six-month runway" title="Income vs Expense">
-          <ResponsiveContainer height={300} width="100%">
-            <LineChart data={data.incomeVsExpenseTrend}>
-              <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" vertical={false} />
-              <XAxis axisLine={false} dataKey="month" tickLine={false} />
-              <YAxis axisLine={false} tickLine={false} />
-              <Tooltip />
-              <Line dataKey="income" dot={false} stroke="#14b8a6" strokeWidth={3.2} type="monotone" />
-              <Line dataKey="expense" dot={false} stroke="#f97316" strokeWidth={3.2} type="monotone" />
-            </LineChart>
-          </ResponsiveContainer>
+        <Card subtitle="Switch the feed below to see the latest five entries" title="Latest Activity">
+          <div className="feed-switcher">
+            {feedTabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={activeFeed === tab.id ? "feed-tab active" : "feed-tab"}
+                onClick={() => setActiveFeed(tab.id)}
+                type="button"
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="thin-list">
+            {feedItems.map((item) => (
+              <div className="thin-list-row" key={item.id}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.meta}</span>
+                </div>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
         </Card>
       </div>
-
-      <Card subtitle="Switch the feed below to see the latest five entries" title="Latest Activity">
-        <div className="feed-switcher">
-          {feedTabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={activeFeed === tab.id ? "feed-tab active" : "feed-tab"}
-              onClick={() => setActiveFeed(tab.id)}
-              type="button"
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="thin-list">
-          {feedItems.map((item) => (
-            <div className="thin-list-row" key={item.id}>
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.meta}</span>
-              </div>
-              <strong>{item.value}</strong>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }

@@ -17,7 +17,7 @@ import lombok.Setter;
 public abstract class BaseEntity {
 
     @Id
-    @Column(columnDefinition = "BINARY(16)")
+    @Column(columnDefinition = "uuid")
     private UUID id;
 
     @Column(nullable = false)

@@ -21,12 +21,19 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final UserContextService userContextService;
+    private final AccountAccessService accountAccessService;
     private final EntityMapper mapper;
 
     @Transactional(readOnly = true)
     public List<AccountResponse> getAccounts() {
-        UserEntity user = userContextService.getCurrentUser();
-        return accountRepository.findAllByUserOrderByCreatedAtDesc(user).stream().map(mapper::toAccountResponse).toList();
+        return accountAccessService.getAccessibleAccounts().stream()
+                .map(account -> mapper.toAccountResponse(
+                        account,
+                        accountAccessService.roleFor(account),
+                        account.getUser().getDisplayName(),
+                        accountAccessService.getExplicitMembers(account).size() + 1
+                ))
+                .toList();
     }
 
     @Transactional
@@ -39,16 +46,18 @@ public class AccountService {
         account.setOpeningBalance(request.openingBalance());
         account.setCurrentBalance(request.openingBalance());
         account.setInstitutionName(request.institutionName());
-        return mapper.toAccountResponse(accountRepository.save(account));
+        AccountEntity savedAccount = accountRepository.save(account);
+        return mapper.toAccountResponse(savedAccount, accountAccessService.roleFor(savedAccount), user.getDisplayName(), 1);
     }
 
     @Transactional
     public AccountResponse update(UUID id, AccountRequest request) {
-        AccountEntity account = findOwned(id);
+        AccountEntity account = accountAccessService.findOwned(id);
         account.setName(request.name().trim());
         account.setType(request.type());
         account.setInstitutionName(request.institutionName());
-        return mapper.toAccountResponse(account);
+        return mapper.toAccountResponse(account, accountAccessService.roleFor(account), account.getUser().getDisplayName(),
+                accountAccessService.getExplicitMembers(account).size() + 1);
     }
 
     @Transactional
@@ -56,8 +65,10 @@ public class AccountService {
         if (request.fromAccountId().equals(request.toAccountId())) {
             throw new BadRequestException("Transfer accounts must be different.");
         }
-        AccountEntity from = findOwned(request.fromAccountId());
-        AccountEntity to = findOwned(request.toAccountId());
+        AccountEntity from = accountAccessService.findAccessible(request.fromAccountId());
+        AccountEntity to = accountAccessService.findAccessible(request.toAccountId());
+        accountAccessService.ensureEditor(from);
+        accountAccessService.ensureEditor(to);
         if (from.getCurrentBalance().compareTo(request.amount()) < 0) {
             throw new BadRequestException("Insufficient funds for transfer.");
         }
@@ -66,8 +77,12 @@ public class AccountService {
     }
 
     @Transactional(readOnly = true)
+    public AccountEntity findAccessible(UUID id) {
+        return accountAccessService.findAccessible(id);
+    }
+
+    @Transactional(readOnly = true)
     public AccountEntity findOwned(UUID id) {
-        return accountRepository.findByIdAndUser(id, userContextService.getCurrentUser())
-                .orElseThrow(() -> new NotFoundException("Account not found."));
+        return accountAccessService.findOwned(id);
     }
 }

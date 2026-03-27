@@ -1,9 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "../components/ui/Card";
 import { ErrorState } from "../components/ui/ErrorState";
 import { LoadingState } from "../components/ui/LoadingState";
-import { useAccountsQuery } from "../hooks/useFinanceQueries";
+import { useAccountMembersQuery, useAccountsQuery } from "../hooks/useFinanceQueries";
 import { financeApi } from "../services/financeApi";
 import { queryClient } from "../services/queryClient";
 import { useToastStore } from "../store/toastStore";
@@ -15,12 +15,25 @@ export function AccountsPage() {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [form, setForm] = useState({
     name: "",
     type: "BANK_ACCOUNT",
     openingBalance: "0",
     institutionName: ""
   });
+  const [inviteForm, setInviteForm] = useState({
+    email: "",
+    role: "EDITOR" as "EDITOR" | "VIEWER"
+  });
+  const { data: members } = useAccountMembersQuery(selectedAccountId || undefined);
+
+  useEffect(() => {
+    if (!selectedAccountId && data?.length) {
+      setSelectedAccountId(data[0].id);
+    }
+  }, [data, selectedAccountId]);
+
   const mutation = useMutation({
     mutationFn: () =>
       financeApi.createAccount({
@@ -38,16 +51,39 @@ export function AccountsPage() {
     }
   });
 
+  const inviteMutation = useMutation({
+    mutationFn: () => financeApi.inviteAccountMember(selectedAccountId, inviteForm),
+    onSuccess: async () => {
+      setInviteForm({ email: "", role: "EDITOR" });
+      pushToast("Member invited successfully.", "success");
+      await queryClient.invalidateQueries({ queryKey: ["account-members", selectedAccountId] });
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    }
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: (payload: { userId: string; role: "EDITOR" | "VIEWER" }) =>
+      financeApi.updateAccountMemberRole(selectedAccountId, payload.userId, { role: payload.role }),
+    onSuccess: async () => {
+      pushToast("Member role updated.", "success");
+      await queryClient.invalidateQueries({ queryKey: ["account-members", selectedAccountId] });
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    }
+  });
+
   if (isLoading) return <LoadingState />;
   if (isError || !data) return <ErrorState message="Accounts failed to load." />;
 
   const visibleAccounts = data.filter((account) => {
-    const matchesSearch = [account.name, account.institutionName, account.type]
+    const matchesSearch = [account.name, account.institutionName, account.type, account.ownerDisplayName]
       .filter(Boolean)
       .some((value) => value?.toLowerCase().includes(search.toLowerCase()));
     const matchesType = typeFilter === "ALL" || account.type === typeFilter;
     return (search ? matchesSearch : true) && matchesType;
   });
+
+  const selectedAccount = data.find((account) => account.id === selectedAccountId);
+  const isOwner = selectedAccount?.accessRole === "OWNER";
 
   return (
     <div className="stack-layout">
@@ -57,7 +93,7 @@ export function AccountsPage() {
             {showForm ? "Close" : "Add account"}
           </button>
         }
-        subtitle="Wallets, banks, and cards"
+        subtitle="Wallets, banks, and shared finance containers"
         title="Accounts"
       >
         <div className="filter-bar">
@@ -109,13 +145,74 @@ export function AccountsPage() {
               <div>
                 <strong>{account.name}</strong>
                 <p>
-                  {account.type} / {account.institutionName || "Personal"}
+                  {account.type} / {account.institutionName || "Personal"} / Owner {account.ownerDisplayName}
                 </p>
               </div>
               <div>
                 <strong>{formatCurrency(account.currentBalance)}</strong>
-                <p>Updated {formatDate(account.updatedAt)}</p>
+                <p>
+                  {account.accessRole} access / {account.memberCount} member{account.memberCount === 1 ? "" : "s"} / Updated{" "}
+                  {formatDate(account.updatedAt)}
+                </p>
               </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card subtitle="Invite collaborators and manage shared access" title="Shared With">
+        <div className="filter-bar filter-bar-goals">
+          <select onChange={(event) => setSelectedAccountId(event.target.value)} value={selectedAccountId}>
+            {data.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+          <input value={selectedAccount?.accessRole ?? ""} disabled />
+        </div>
+
+        {isOwner ? (
+          <form
+            className="inline-form sheet-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              inviteMutation.mutate();
+            }}
+          >
+            <input value={inviteForm.email} onChange={(event) => setInviteForm({ ...inviteForm, email: event.target.value })} placeholder="Invite email" />
+            <select value={inviteForm.role} onChange={(event) => setInviteForm({ ...inviteForm, role: event.target.value as "EDITOR" | "VIEWER" })}>
+              <option value="EDITOR">Editor</option>
+              <option value="VIEWER">Viewer</option>
+            </select>
+            <button className="primary-button" disabled={inviteMutation.isPending || !selectedAccountId} type="submit">
+              {inviteMutation.isPending ? "Inviting..." : "Invite member"}
+            </button>
+          </form>
+        ) : (
+          <div className="empty-state compact-empty">Only the account owner can invite members or change roles.</div>
+        )}
+
+        <div className="thin-list">
+          {(members ?? []).map((member) => (
+            <div className="thin-list-row" key={member.userId}>
+              <div>
+                <strong>{member.displayName}</strong>
+                <span>
+                  {member.email} / {member.owner ? "Owner" : member.role}
+                </span>
+              </div>
+              {isOwner && !member.owner ? (
+                <select
+                  onChange={(event) => roleMutation.mutate({ userId: member.userId, role: event.target.value as "EDITOR" | "VIEWER" })}
+                  value={member.role}
+                >
+                  <option value="EDITOR">Editor</option>
+                  <option value="VIEWER">Viewer</option>
+                </select>
+              ) : (
+                <strong>{member.role}</strong>
+              )}
             </div>
           ))}
         </div>

@@ -47,6 +47,7 @@ export function TransactionsPage() {
   const [selectedMonth, setSelectedMonth] = useState("ALL");
   const [selectedYear, setSelectedYear] = useState("ALL");
   const [form, setForm] = useState<TransactionFormState>(createDefaultForm());
+  const transactions = data ?? [];
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -85,12 +86,9 @@ export function TransactionsPage() {
     }
   });
 
-  if (isLoading) return <LoadingState />;
-  if (isError || !data) return <ErrorState message="Transactions failed to load." />;
-
   const filteredCategories = (categories ?? []).filter((category) => category.type === form.type);
-  const availableYears = Array.from(new Set(data.map((transaction) => new Date(transaction.date).getFullYear().toString()))).sort().reverse();
-  const visibleTransactions = data.filter((transaction) => {
+  const availableYears = Array.from(new Set(transactions.map((transaction) => new Date(transaction.date).getFullYear().toString()))).sort().reverse();
+  const visibleTransactions = transactions.filter((transaction) => {
     const transactionDate = new Date(transaction.date);
     const matchesSearch = [transaction.merchant, transaction.note, transaction.categoryName, transaction.accountName]
       .filter(Boolean)
@@ -104,9 +102,12 @@ export function TransactionsPage() {
   });
 
   const categoryOptions = useMemo(
-    () => Array.from(new Set(data.map((transaction) => transaction.categoryName).filter((value): value is string => Boolean(value)))),
-    [data]
+    () => Array.from(new Set(transactions.map((transaction) => transaction.categoryName).filter((value): value is string => Boolean(value)))),
+    [transactions]
   );
+
+  if (isLoading) return <LoadingState />;
+  if (isError || !data) return <ErrorState message="Transactions failed to load." />;
 
   const startCreate = () => {
     setEditingId(null);
@@ -119,7 +120,7 @@ export function TransactionsPage() {
   };
 
   const startEdit = (transactionId: string) => {
-    const transaction = data.find((item) => item.id === transactionId);
+    const transaction = transactions.find((item) => item.id === transactionId);
     if (!transaction) return;
     setEditingId(transaction.id);
     setForm({
@@ -257,9 +258,18 @@ export function TransactionsPage() {
         {visibleTransactions.map((transaction) => (
           <div className="table-grid-row table-grid-row-actions" key={transaction.id}>
             <span>{formatDate(transaction.date)}</span>
-            <span className="cell-copy">{transaction.merchant || "-"}</span>
-            <span className="cell-copy">{transaction.categoryName || transaction.type}</span>
-            <span className="cell-copy">{transaction.accountName}</span>
+            <div className="cell-stack">
+              <strong>{transaction.merchant || "-"}</strong>
+              <span>{transaction.createdByDisplayName ? `Added by ${transaction.createdByDisplayName}` : ""}</span>
+            </div>
+            <div className="cell-stack">
+              <strong>{transaction.categoryName || transaction.type}</strong>
+              <span>{transaction.alerts.length ? transaction.alerts.join(" / ") : transaction.type}</span>
+            </div>
+            <div className="cell-stack">
+              <strong>{transaction.accountName}</strong>
+              <span>{transaction.note || "No note"}</span>
+            </div>
             <strong>{formatCurrency(transaction.amount)}</strong>
             <div className="row-actions">
               <button className="inline-link-button" onClick={() => startEdit(transaction.id)} type="button">

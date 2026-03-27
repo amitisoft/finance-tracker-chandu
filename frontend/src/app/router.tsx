@@ -5,8 +5,10 @@ import { AccountsPage } from "../pages/AccountsPage";
 import { BudgetsPage } from "../pages/BudgetsPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { GoalsPage } from "../pages/GoalsPage";
+import { InsightsPage } from "../pages/InsightsPage";
 import { RecurringPage } from "../pages/RecurringPage";
 import { ReportsPage } from "../pages/ReportsPage";
+import { RulesPage } from "../pages/RulesPage";
 import { TransactionsPage } from "../pages/TransactionsPage";
 import { useAuthStore } from "../store/authStore";
 
@@ -36,6 +38,8 @@ export const router = createBrowserRouter([
     element: <ProtectedLayout />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: "insights", element: <InsightsPage /> },
+      { path: "rules", element: <RulesPage /> },
       { path: "transactions", element: <TransactionsPage /> },
       { path: "budgets", element: <BudgetsPage /> },
       { path: "goals", element: <GoalsPage /> },

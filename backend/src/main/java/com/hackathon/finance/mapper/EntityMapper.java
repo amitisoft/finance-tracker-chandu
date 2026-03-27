@@ -14,8 +14,10 @@ import com.hackathon.finance.entity.GoalEntity;
 import com.hackathon.finance.entity.RecurringTransactionEntity;
 import com.hackathon.finance.entity.TransactionEntity;
 import com.hackathon.finance.entity.UserEntity;
+import com.hackathon.finance.entity.enums.AccountMemberRole;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.LinkedHashSet;
 import org.springframework.stereotype.Component;
 
@@ -26,7 +28,7 @@ public class EntityMapper {
         return new AuthResponse.UserSummary(user.getId(), user.getEmail(), user.getDisplayName());
     }
 
-    public AccountResponse toAccountResponse(AccountEntity account) {
+    public AccountResponse toAccountResponse(AccountEntity account, AccountMemberRole accessRole, String ownerDisplayName, int memberCount) {
         return new AccountResponse(
                 account.getId(),
                 account.getName(),
@@ -34,7 +36,10 @@ public class EntityMapper {
                 account.getOpeningBalance(),
                 account.getCurrentBalance(),
                 account.getInstitutionName(),
-                account.getUpdatedAt()
+                account.getUpdatedAt(),
+                accessRole,
+                ownerDisplayName,
+                memberCount
         );
     }
 
@@ -49,7 +54,7 @@ public class EntityMapper {
         );
     }
 
-    public TransactionResponse toTransactionResponse(TransactionEntity transaction) {
+    public TransactionResponse toTransactionResponse(TransactionEntity transaction, List<String> alerts) {
         return new TransactionResponse(
                 transaction.getId(),
                 transaction.getType(),
@@ -65,7 +70,10 @@ public class EntityMapper {
                 transaction.getNote(),
                 transaction.getPaymentMethod(),
                 new LinkedHashSet<>(transaction.getTags()),
-                transaction.getCreatedAt()
+                transaction.getCreatedAt(),
+                transaction.getUser().getId(),
+                transaction.getUser().getDisplayName(),
+                alerts
         );
     }
 
